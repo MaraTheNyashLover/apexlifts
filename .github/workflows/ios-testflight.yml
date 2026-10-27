@@ -1,0 +1,152 @@
+name: iOS TestFlight
+
+# Builds the Apex Lifts iOS app on a cloud Mac and uploads it to TestFlight.
+# Runs on every push to main that touches the app, or by hand (Actions tab -> Run workflow).
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   ASC_KEY_ID        App Store Connect API key ID (10 chars)
+#   ASC_ISSUER_ID     App Store Connect API issuer ID (UUID)
+#   ASC_KEY_P8_B64    The AuthKey_XXXX.p8 file, base64-encoded
+#   SIGNING_P12_B64   PKCS#12 bundle with the Apple Development + Apple Distribution certs, base64-encoded
+#   SIGNING_P12_PASSWORD  Password of that .p12
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ios-app/**"
+      - ".github/workflows/ios-testflight.yml"
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: "Upload to TestFlight (false = build only)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      PROJECT: ios-app/ios/App/App.xcodeproj
+      SCHEME: App
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ios-app/package-lock.json
+
+      - name: Select newest Xcode on the runner
+        run: |
+          XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install Capacitor plugins and sync native project
+        working-directory: ios-app
+        run: |
+          npm ci
+          npx cap sync ios
+
+      - name: Install App Store Connect API key
+        env:
+          ASC_KEY_P8_B64: ${{ secrets.ASC_KEY_P8_B64 }}
+        run: |
+          mkdir -p "$HOME/private_keys"
+          echo "$ASC_KEY_P8_B64" | base64 --decode > "$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          echo "ASC_KEY_PATH=$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8" >> "$GITHUB_ENV"
+
+      - name: Import signing certificates into a temporary keychain
+        env:
+          SIGNING_P12_B64: ${{ secrets.SIGNING_P12_B64 }}
+          SIGNING_P12_PASSWORD: ${{ secrets.SIGNING_P12_PASSWORD }}
+        run: |
+          KC="$RUNNER_TEMP/build.keychain-db"
+          KCPW=$(uuidgen)
+          security create-keychain -p "$KCPW" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPW" "$KC"
+          # Apple WWDR intermediates (needed for the cert chain to validate)
+          for g in G3 G4 G5 G6; do
+            curl -fsSL "https://www.apple.com/certificateauthority/AppleWWDRCA${g}.cer" -o "$RUNNER_TEMP/wwdr$g.cer" \
+              && security import "$RUNNER_TEMP/wwdr$g.cer" -k "$KC" -T /usr/bin/codesign -T /usr/bin/security || true
+          done
+          echo "$SIGNING_P12_B64" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security import "$RUNNER_TEMP/signing.p12" -k "$KC" -P "$SIGNING_P12_PASSWORD" -A \
+            -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCPW" "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" login.keychain-db
+          security find-identity -v -p codesigning "$KC"
+          rm -f "$RUNNER_TEMP/signing.p12"
+
+      - name: Archive
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            | tee "$RUNNER_TEMP/archive.log" | grep -E "error:|warning: .*(sign|provision)|\*\* ARCHIVE" || true
+          grep -q "ARCHIVE SUCCEEDED" "$RUNNER_TEMP/archive.log"
+
+      - name: Export .ipa and upload to TestFlight
+        if: ${{ github.event_name == 'push' || inputs.upload }}
+        run: |
+          set -o pipefail
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist ios-app/ios/App/ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            | tee "$RUNNER_TEMP/export.log" | grep -E "error:|Upload|EXPORT" || true
+          grep -q "EXPORT SUCCEEDED" "$RUNNER_TEMP/export.log"
+          echo "Uploaded build $BUILD_NUMBER to TestFlight. It shows up in App Store Connect after Apple processes it (5-30 min)."
+
+      - name: Export .ipa only (no upload)
+        if: ${{ github.event_name == 'workflow_dispatch' && !inputs.upload }}
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist ios-app/ios/App/ExportOptions.local.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Keep build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ github.run_number }}
+          path: |
+            ${{ runner.temp }}/archive.log
+            ${{ runner.temp }}/export.log
+            ${{ runner.temp }}/export/*.ipa
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Clean up keychain and key
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/build.keychain-db" 2>/dev/null || true
+          rm -f "$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8"

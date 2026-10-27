@@ -1,0 +1,18 @@
+node_modules/
+ios-app/ios/App/App/public/
+ios-app/ios/App/App/capacitor.config.json
+ios-app/ios/App/App/config.xml
+ios-app/ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
+ios-app/ios/App/App.xcodeproj/xcuserdata/
+ios-app/ios/App/.build/
+ios-app/ios/DerivedData/
+*.zip
+*.bak*
+data/
+ingest/
+.DS_Store
+# never commit keys or certs
+*.p8
+*.p12
+*.cer
+*.mobileprovision

@@ -1,0 +1,102 @@
+
+/* ===== Real map (Leaflet) ===== */
+.map-wrap{touch-action:auto;cursor:default}
+#map{position:absolute;inset:0;background:#111216;z-index:0}
+.leaflet-container{background:#111216;font-family:var(--font-body)}
+.leaflet-control-attribution{background:rgba(15,16,18,.75)!important;color:var(--muted)!important;font-size:9px!important;padding:2px 6px!important;border-radius:6px 0 0 0!important}
+.leaflet-control-attribution a{color:var(--fg-2)!important}
+.leaflet-bar{border:1px solid var(--line-2)!important;box-shadow:var(--shadow)!important;border-radius:10px!important;overflow:hidden}
+.leaflet-bar a{background:rgba(23,24,27,.94)!important;color:var(--fg)!important;border-bottom:1px solid var(--line)!important;width:34px!important;height:34px!important;line-height:34px!important;font-weight:700}
+.leaflet-bar a:last-child{border-bottom:0!important}
+.leaflet-bar a.leaflet-disabled{color:var(--muted)!important}
+.leaflet-tile-pane{filter:brightness(.78) saturate(.7)}
+.leaflet-top.leaflet-right{top:130px;right:12px}
+.gpin{background:none;border:0}
+.gpin .dot{position:relative;width:34px;height:34px;border-radius:50%;background:var(--surface-2);border:1.5px solid var(--line-2);display:grid;place-items:center;box-shadow:0 4px 12px rgba(0,0,0,.5);transition:transform .15s,background .2s;margin:0 auto}
+.gpin .dot svg{width:17px;height:17px;fill:var(--gold)}
+.gpin:hover .dot{transform:scale(1.08);background:var(--surface-3)}
+.gpin .n{position:absolute;right:-5px;top:-5px;min-width:16px;height:16px;border-radius:8px;background:var(--gold);color:var(--gold-ink);font-family:var(--font-display);font-weight:800;font-size:10.5px;line-height:16px;text-align:center;padding:0 3px}
+.gpin .lbl{margin-top:3px;text-align:center;font-family:var(--font-display);font-weight:700;font-size:11.5px;letter-spacing:.03em;color:var(--fg-2);white-space:nowrap;text-shadow:0 0 4px #111216,0 0 4px #111216,0 1px 6px #000;line-height:1.05}
+.gpin .lbl small{display:block;font-size:9.5px;color:var(--muted);letter-spacing:.04em}
+.gpin.indie .dot{width:26px;height:26px}
+.gpin.indie .dot svg{width:13px;height:13px;fill:var(--fg-2)}
+.gpin.indie .n{right:-6px;top:-6px}
+.gpin.featured .dot{width:44px;height:44px;background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 6px rgba(201,242,58,.18),0 6px 18px rgba(0,0,0,.5)}
+.gpin.featured .dot svg{width:22px;height:22px;fill:var(--accent-ink)}
+.gpin.featured .n{background:var(--fg);color:var(--bg)}
+.gpin.featured .lbl{color:var(--fg);font-size:12.5px}
+.gpin.featured .dot::before{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid var(--accent);opacity:.6;animation:ring 2s ease-out infinite}
+@keyframes ring{from{transform:scale(.8);opacity:.6}to{transform:scale(1.6);opacity:0}}
+.mepin{background:none;border:0}
+.mepin i{display:block;width:14px;height:14px;border-radius:50%;background:var(--fg);border:2.5px solid #121316;box-shadow:0 0 0 6px rgba(243,239,230,.14)}
+.near{bottom:16px;z-index:1000}
+.inview{position:absolute;left:12px;bottom:16px;z-index:1000;height:32px;padding:0 12px;border-radius:999px;background:rgba(23,24,27,.94);border:1px solid var(--line-2);display:flex;align-items:center;gap:6px;font-family:var(--font-display);font-weight:700;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-2);box-shadow:var(--shadow);pointer-events:none}
+.inview b{color:var(--fg)}
+.inview i{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.inview.off i{background:var(--warn)}
+.src-note{position:absolute;left:12px;top:12px;z-index:1000;font-family:var(--font-display);font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:rgba(15,16,18,.7);padding:3px 8px;border-radius:6px;pointer-events:none}
+.sheet{z-index:1001}
+.map-top{z-index:1002}
+.loading-row{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;padding:14px 0}
+.loading-row i{width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.tier-chip{font-size:11px}
+.leaflet-marker-icon:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:50%}
+
+/* ===== iPhone safe areas ===== */
+#app{padding-top:env(safe-area-inset-top,0px)}
+#app:has(.discover){padding-top:0}
+.map-top{padding-top:calc(12px + env(safe-area-inset-top,0px))}
+.leaflet-top.leaflet-right{top:calc(130px + env(safe-area-inset-top,0px))}
+.src-note{top:calc(12px + env(safe-area-inset-top,0px))}
+/* Near me: icon sits left of the label */
+.near{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 14px 0 12px;white-space:nowrap;line-height:1;appearance:none;-webkit-appearance:none}
+.near svg{flex:none;position:static;display:block;width:18px;height:18px}
+/* Gym pin: crown dead centre */
+.gpin .dot{line-height:0}
+.gpin .dot svg{display:block;transform:translateY(-1px)}
+/* Kill the old fake-map rule that absolutely positioned every svg inside the map */
+.map-wrap .gpin .dot svg{position:static;inset:auto;transform:none}
+.map-wrap .near svg,.map-wrap .inview svg{position:static;inset:auto;width:18px;height:18px}
+
+/* ===== Profiles: photos, banners, stats ===== */
+.av img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.banner{height:124px;margin:4px 16px 0;border-radius:var(--r);background:linear-gradient(135deg,#1b1c20 0%,#23261a 55%,#2f3a12 100%);background-size:cover;background-position:center;border:1px solid var(--line)}
+.banner+.prof-head{margin-top:-46px}
+.banner+.prof-head .av-xl{box-shadow:0 0 0 4px var(--bg),0 8px 24px rgba(0,0,0,.5)}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:8px;padding:0 16px 14px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-xs);padding:8px 10px;min-width:0}
+.stat b{display:block;font-family:var(--font-display);font-size:19px;font-weight:700;line-height:1.1}
+.stat small{display:block;color:var(--muted);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;margin-top:2px}
+[data-person]{cursor:pointer}
+.gym-link.muted{pointer-events:none}
+
+/* ===== Profile editing sheets ===== */
+body,#app{touch-action:manipulation}
+.av-wrap{position:relative;display:inline-block}
+.pencil{position:absolute;right:-4px;bottom:-2px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--accent-ink);border:3px solid var(--bg);display:grid;place-items:center;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.pencil svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.stats-row.editable{cursor:pointer}
+.stat-edit{display:grid;place-items:center;color:var(--muted);gap:2px;background:transparent;border-style:dashed}
+.stat-edit svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;padding:0 16px 12px}
+.sheet-form{display:flex;flex-direction:column;gap:12px;padding:0 16px 20px}
+.sheet-form .plain-in{height:52px}
+.sheet-form .plain-in input{font-size:22px}
+.sheet-form .field label span{font-weight:500;letter-spacing:0;text-transform:none;color:var(--muted)}
+a.btn{text-decoration:none}
+.city-sheet{max-height:88%}
+
+/* ===== Friends ===== */
+.chip svg{width:12px;height:12px}
+.sheet-form .search input{font-size:16px}
+.sheet-form .list .row{cursor:default}
+
+/* ===== Suggestions ===== */
+.idea{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-s);padding:12px}
+.vote{flex:none;width:48px;height:56px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--fg-2);font-family:var(--font-display);font-weight:800;font-size:15px}
+.vote svg{width:16px;height:16px}
+.vote.on{background:rgba(201,242,58,.14);border-color:var(--accent);color:var(--accent)}
+.idea-t{font-weight:600;font-size:15.5px;line-height:1.3}
+.idea-b{color:var(--fg-2);font-size:14px;margin-top:4px;white-space:pre-wrap}
+.idea-m{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12px}
