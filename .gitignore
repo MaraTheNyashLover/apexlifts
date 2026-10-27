@@ -13,6 +13,7 @@ ingest/
 .DS_Store
 # never commit keys or certs
 *.p8
+!ci/secrets.tar.enc
 *.p12
 *.cer
 *.mobileprovision

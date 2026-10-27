@@ -3,12 +3,12 @@ name: iOS TestFlight
 # Builds the Apex Lifts iOS app on a cloud Mac and uploads it to TestFlight.
 # Runs on every push to main that touches the app, or by hand (Actions tab -> Run workflow).
 #
-# Required repository secrets (Settings -> Secrets and variables -> Actions):
-#   ASC_KEY_ID        App Store Connect API key ID (10 chars)
-#   ASC_ISSUER_ID     App Store Connect API issuer ID (UUID)
-#   ASC_KEY_P8_B64    The AuthKey_XXXX.p8 file, base64-encoded
-#   SIGNING_P12_B64   PKCS#12 bundle with the Apple Development + Apple Distribution certs, base64-encoded
-#   SIGNING_P12_PASSWORD  Password of that .p12
+# One required repository secret (Settings -> Secrets and variables -> Actions):
+#   BUNDLE_KEY   passphrase that decrypts ci/secrets.tar.enc
+# ci/secrets.tar.enc (AES-256, made with tools/pack-secrets.sh) contains:
+#   AuthKey_XXXX.p8  App Store Connect API key
+#   signing.p12      Apple Development + Apple Distribution certs and private key
+#   env              ASC_KEY_ID, ASC_ISSUER_ID, SIGNING_P12_PASSWORD
 
 on:
   push:
@@ -32,8 +32,6 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     env:
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       PROJECT: ios-app/ios/App/App.xcodeproj
       SCHEME: App
       BUILD_NUMBER: ${{ github.run_number }}
@@ -58,18 +56,20 @@ jobs:
           npm ci
           npx cap sync ios
 
-      - name: Install App Store Connect API key
+      - name: Unpack signing secrets
         env:
-          ASC_KEY_P8_B64: ${{ secrets.ASC_KEY_P8_B64 }}
+          BUNDLE_KEY: ${{ secrets.BUNDLE_KEY }}
         run: |
+          test -n "$BUNDLE_KEY" || { echo "::error::BUNDLE_KEY secret is not set"; exit 1; }
+          S="$RUNNER_TEMP/secrets"; mkdir -p "$S"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BUNDLE_KEY -in ci/secrets.tar.enc | tar -x -C "$S"
+          # env file holds ASC_KEY_ID, ASC_ISSUER_ID, SIGNING_P12_PASSWORD
+          while IFS='=' read -r k v; do [ -n "$k" ] && { echo "::add-mask::$v"; echo "$k=$v" >> "$GITHUB_ENV"; }; done < "$S/env"
           mkdir -p "$HOME/private_keys"
-          echo "$ASC_KEY_P8_B64" | base64 --decode > "$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8"
-          echo "ASC_KEY_PATH=$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8" >> "$GITHUB_ENV"
+          cp "$S"/AuthKey_*.p8 "$HOME/private_keys/"
+          echo "ASC_KEY_PATH=$(ls "$HOME"/private_keys/AuthKey_*.p8)" >> "$GITHUB_ENV"
 
       - name: Import signing certificates into a temporary keychain
-        env:
-          SIGNING_P12_B64: ${{ secrets.SIGNING_P12_B64 }}
-          SIGNING_P12_PASSWORD: ${{ secrets.SIGNING_P12_PASSWORD }}
         run: |
           KC="$RUNNER_TEMP/build.keychain-db"
           KCPW=$(uuidgen)
@@ -81,13 +81,12 @@ jobs:
             curl -fsSL "https://www.apple.com/certificateauthority/AppleWWDRCA${g}.cer" -o "$RUNNER_TEMP/wwdr$g.cer" \
               && security import "$RUNNER_TEMP/wwdr$g.cer" -k "$KC" -T /usr/bin/codesign -T /usr/bin/security || true
           done
-          echo "$SIGNING_P12_B64" | base64 --decode > "$RUNNER_TEMP/signing.p12"
-          security import "$RUNNER_TEMP/signing.p12" -k "$KC" -P "$SIGNING_P12_PASSWORD" -A \
+          security import "$RUNNER_TEMP/secrets/signing.p12" -k "$KC" -P "$SIGNING_P12_PASSWORD" -A \
             -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/xcodebuild
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KCPW" "$KC" > /dev/null
           security list-keychains -d user -s "$KC" login.keychain-db
           security find-identity -v -p codesigning "$KC"
-          rm -f "$RUNNER_TEMP/signing.p12"
+          rm -rf "$RUNNER_TEMP/secrets"
 
       - name: Archive
         run: |
@@ -149,4 +148,4 @@ jobs:
         if: always()
         run: |
           security delete-keychain "$RUNNER_TEMP/build.keychain-db" 2>/dev/null || true
-          rm -f "$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          rm -rf "$HOME/private_keys" "$RUNNER_TEMP/secrets"
